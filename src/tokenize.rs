@@ -1,17 +1,39 @@
+use crate::err::*;
 pub type TokenRes<'a> = Result<Token<'a>, ParseErr>;
 
+use std::str::FromStr;
+#[derive(Debug)]
 pub struct Token<'a> {
-    s: &'a str,
-    line: usize,
-    col: usize,
-    tt: TokenType,
+    pub s: &'a str,
+    pub line: usize,
+    pub col: usize,
+    pub tt: TokenType,
 }
 
+impl<'a> Token<'a> {
+    pub fn as_err(self, etype: ErrType) -> ParseErr {
+        ParseErr {
+            line: self.line,
+            col: self.col,
+            etype,
+        }
+    }
+
+    pub fn num_val(self) -> Result<usize, ParseErr> {
+        usize::from_str(self.s).map_err(|_| self.as_err(ErrType::NotANumber))
+    }
+}
+
+#[derive(PartialEq, Debug)]
 pub enum TokenType {
     Time,
     Ident,
     Dollar,
     Number,
+    Colon,
+    Slash,
+    Minus,
+    Comma,
     SquareOpen,
     SquareClose,
     EOF,
@@ -70,7 +92,14 @@ impl<'a> Tokenizer<'a> {
         self.whitespace();
         match self.s[self.t_start..].chars().next() {
             Some('$') => self.make_token(1, TokenType::Dollar),
-            //Some(c) if c >= '0' && c <= '9' => self.number(),
+            Some(':') => self.make_token(1, TokenType::Colon),
+            Some('/') => self.make_token(1, TokenType::Slash),
+            Some('[') => self.make_token(1, TokenType::SquareOpen),
+            Some(']') => self.make_token(1, TokenType::SquareClose),
+            Some('-') => self.make_token(1, TokenType::Minus),
+            Some(',') => self.make_token(1, TokenType::Comma),
+            Some(c) if c >= '0' && c <= '9' => self.number(),
+            Some(c) if c.is_alphabetic() => self.ident(),
             Some(_) => self.make_err(ErrType::NoToken),
             None => self.make_token(0, TokenType::EOF),
         }
@@ -83,7 +112,7 @@ impl<'a> Tokenizer<'a> {
             col: self.col,
             tt,
         };
-        self.t_start += 1;
+        self.t_start += len;
         Ok(res)
     }
 
@@ -101,17 +130,19 @@ impl<'a> Tokenizer<'a> {
             if c < '0' || c > '9' {
                 return self.make_token(i, TokenType::Number);
             }
+            self.col += 1;
         }
         self.make_token(self.s.len() - self.t_start, TokenType::Number)
     }
-}
 
-pub struct ParseErr {
-    line: usize,
-    col: usize,
-    etype: ErrType,
-}
-
-pub enum ErrType {
-    NoToken,
+    pub fn ident(&mut self) -> TokenRes<'a> {
+        let mut tmp = self.chars();
+        while let Some((i, c)) = tmp.next() {
+            if !c.is_alphabetic() {
+                return self.make_token(i, TokenType::Ident);
+            }
+            self.col += 1;
+        }
+        self.make_token(self.s.len() - self.t_start, TokenType::Ident)
+    }
 }
