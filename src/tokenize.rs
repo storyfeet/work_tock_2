@@ -19,8 +19,8 @@ impl<'a> Token<'a> {
         }
     }
 
-    pub fn num_val(&self) -> Result<usize, ParseErr> {
-        usize::from_str(self.s).map_err(|_| self.as_err(ErrType::NotANumber))
+    pub fn num_val(&self) -> Result<u32, ParseErr> {
+        u32::from_str(self.s).map_err(|_| self.as_err(ErrType::NotANumber))
     }
 }
 

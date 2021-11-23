@@ -44,5 +44,7 @@ pub enum ErrType {
     NotATime,
     NotYear,
     UnexpectedEOF,
+    YearNotSet,
+    DateNotSet,
     Expected(TokenType),
 }

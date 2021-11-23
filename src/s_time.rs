@@ -8,19 +8,19 @@ use std::fmt::{Debug, Display, Formatter};
 //use crate::err::ParseErr;
 
 #[derive(Copy, Clone, PartialOrd, PartialEq, Eq, Add, Sub, AddAssign, SubAssign)]
-pub struct STime(usize); //minutes
+pub struct STime(u32); //minutes
 
 impl STime {
-    pub fn new(hr: usize, min: usize) -> Self {
+    pub fn new(hr: u32, min: u32) -> Self {
         STime(hr * 60 + min)
     }
     pub fn now() -> Self {
         let t = Local::now();
-        STime::new(t.time().hour() as usize, t.time().minute() as usize)
+        STime::new(t.time().hour() as u32, t.time().minute() as u32)
     }
 
     pub fn since(&self, now_date: &NaiveDate, then_time: Self, then_date: &NaiveDate) -> Self {
-        let days_between = (*now_date - *then_date).num_days() as usize;
+        let days_between = (*now_date - *then_date).num_days() as u32;
         *self + STime::new(24 * days_between, 0) - then_time
     }
 }

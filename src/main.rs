@@ -1,5 +1,6 @@
 pub mod err;
 pub mod parser;
+pub mod reader;
 pub mod s_time;
 pub mod tokenize;
 use err::CanErr;
