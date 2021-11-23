@@ -14,7 +14,7 @@ fn main() -> Result<(), err::BoxErr> {
     let mut tk = Parser::new(&s);
     loop {
         let ac = tk.next_action().as_err()?;
-        if ac == Action::End {
+        if ac.ad == ActionData::End {
             break;
         }
         println!("Action :: {:?}", ac);

@@ -11,7 +11,7 @@ pub struct Token<'a> {
 }
 
 impl<'a> Token<'a> {
-    pub fn as_err(self, etype: ErrType) -> ParseErr {
+    pub fn as_err(&self, etype: ErrType) -> ParseErr {
         ParseErr {
             line: self.line,
             col: self.col,
@@ -19,13 +19,14 @@ impl<'a> Token<'a> {
         }
     }
 
-    pub fn num_val(self) -> Result<usize, ParseErr> {
+    pub fn num_val(&self) -> Result<usize, ParseErr> {
         usize::from_str(self.s).map_err(|_| self.as_err(ErrType::NotANumber))
     }
 }
 
 #[derive(PartialEq, Debug)]
 pub enum TokenType {
+    Sep,
     Time,
     Ident,
     Dollar,
@@ -33,9 +34,11 @@ pub enum TokenType {
     Colon,
     Slash,
     Minus,
-    Comma,
+    Equals,
     SquareOpen,
     SquareClose,
+    Tag,
+    ClearTag,
     EOF,
 }
 
@@ -65,20 +68,7 @@ impl<'a> Tokenizer<'a> {
         while let Some((i, c)) = tmp.next() {
             self.col += 1;
             match c {
-                '\n' => {
-                    self.line += 1;
-                    self.col = 0
-                }
                 ' ' | '\t' | '\r' => {}
-                '#' => {
-                    while let Some((_, c)) = tmp.next() {
-                        if c == '\n' {
-                            self.col = 0;
-                            self.line += 1;
-                            break;
-                        }
-                    }
-                }
                 _ => {
                     self.t_start += i;
                     return;
@@ -91,29 +81,49 @@ impl<'a> Tokenizer<'a> {
     pub fn next_token(&mut self) -> TokenRes<'a> {
         self.whitespace();
         match self.s[self.t_start..].chars().next() {
-            Some('$') => self.make_token(1, TokenType::Dollar),
-            Some(':') => self.make_token(1, TokenType::Colon),
-            Some('/') => self.make_token(1, TokenType::Slash),
-            Some('[') => self.make_token(1, TokenType::SquareOpen),
-            Some(']') => self.make_token(1, TokenType::SquareClose),
-            Some('-') => self.make_token(1, TokenType::Minus),
-            Some(',') => self.make_token(1, TokenType::Comma),
+            Some('\n') => {
+                self.line += 1;
+                self.col = 0;
+                Ok(self.make_token(1, TokenType::Sep))
+            }
+
+            Some('#') => {
+                let mut tmp = self.s[self.t_start..].char_indices();
+                while let Some((i, c)) = tmp.next() {
+                    if c == '\n' {
+                        self.col = 0;
+                        self.line += 1;
+                        return Ok(self.make_token(i + 1, TokenType::Sep));
+                    }
+                }
+                Ok(self.make_token(self.s[self.t_start..].len(), TokenType::EOF))
+            }
+            Some(',') => Ok(self.make_token(1, TokenType::Sep)),
+            Some('_') => self.make_tag(),
+
+            Some('$') => Ok(self.make_token(1, TokenType::Dollar)),
+            Some(':') => Ok(self.make_token(1, TokenType::Colon)),
+            Some('/') => Ok(self.make_token(1, TokenType::Slash)),
+            Some('[') => Ok(self.make_token(1, TokenType::SquareOpen)),
+            Some(']') => Ok(self.make_token(1, TokenType::SquareClose)),
+            Some('-') => Ok(self.make_token(1, TokenType::Minus)),
+            Some('=') => Ok(self.make_token(1, TokenType::Equals)),
             Some(c) if c >= '0' && c <= '9' => self.number(),
-            Some(c) if c.is_alphabetic() => self.ident(),
+            Some(c) if c.is_alphabetic() => Ok(self.ident()),
             Some(_) => self.make_err(ErrType::NoToken),
-            None => self.make_token(0, TokenType::EOF),
+            None => Ok(self.make_token(0, TokenType::EOF)),
         }
     }
 
-    pub fn make_token(&mut self, len: usize, tt: TokenType) -> TokenRes<'a> {
+    pub fn make_token(&mut self, len: usize, tt: TokenType) -> Token<'a> {
         let res = Token {
             s: &self.s[self.t_start..self.t_start + len],
             line: self.line,
-            col: self.col,
+            col: self.col + 1 - len,
             tt,
         };
         self.t_start += len;
-        Ok(res)
+        res
     }
 
     pub fn make_err(&mut self, etype: ErrType) -> TokenRes<'a> {
@@ -128,21 +138,28 @@ impl<'a> Tokenizer<'a> {
         let mut tmp = self.chars();
         while let Some((i, c)) = tmp.next() {
             if c < '0' || c > '9' {
-                return self.make_token(i, TokenType::Number);
+                return Ok(self.make_token(i, TokenType::Number));
             }
             self.col += 1;
         }
-        self.make_token(self.s.len() - self.t_start, TokenType::Number)
+        Ok(self.make_token(self.s.len() - self.t_start, TokenType::Number))
     }
 
-    pub fn ident(&mut self) -> TokenRes<'a> {
+    pub fn ident(&mut self) -> Token<'a> {
         let mut tmp = self.chars();
         while let Some((i, c)) = tmp.next() {
-            if !c.is_alphabetic() {
+            if !c.is_alphabetic() && c != '_' {
                 return self.make_token(i, TokenType::Ident);
             }
             self.col += 1;
         }
         self.make_token(self.s.len() - self.t_start, TokenType::Ident)
+    }
+
+    pub fn make_tag(&mut self) -> TokenRes<'a> {
+        match self.s[self.t_start + 1..].chars().next() {
+            Some('_') => Ok(self.make_token(2, TokenType::ClearTag)),
+            Some(_) | None => Ok(self.make_token(1, TokenType::Tag)),
+        }
     }
 }

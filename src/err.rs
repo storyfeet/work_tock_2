@@ -1,3 +1,4 @@
+use crate::tokenize::TokenType;
 use std::fmt;
 
 pub type BoxErr = Box<dyn std::error::Error>;
@@ -38,5 +39,10 @@ impl std::error::Error for ParseErr {}
 pub enum ErrType {
     NoToken,
     NotANumber,
+    NotAnItem,
     NotSlashOrColon,
+    NotATime,
+    NotYear,
+    UnexpectedEOF,
+    Expected(TokenType),
 }
