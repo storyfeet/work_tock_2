@@ -1,3 +1,4 @@
+use crate::reader::Clock;
 use crate::tokenize::TokenType;
 use std::fmt;
 
@@ -44,7 +45,27 @@ pub enum ErrType {
     NotATime,
     NotYear,
     UnexpectedEOF,
+    JobNotSet,
     YearNotSet,
     DateNotSet,
+    ClockinNotSet,
     Expected(TokenType),
 }
+
+#[derive(Debug)]
+pub struct ClockErr {
+    pub clock: Clock,
+    pub etype: ClockErrType,
+}
+
+#[derive(Debug)]
+pub enum ClockErrType {
+    OutBeforeIn,
+}
+
+impl fmt::Display for ClockErr {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "Error with Clock: {:?}  -- {:?}", self.clock, self.etype,)
+    }
+}
+impl std::error::Error for ClockErr {}

@@ -8,3 +8,5 @@ edition = "2021"
 [dependencies]
 chrono = "0.4"
 derive_more = "0.99.16"
+clap = "2.33.3"
+clap_conf = "0.1.5"

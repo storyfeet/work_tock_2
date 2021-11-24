@@ -1,64 +1,148 @@
-use crate::err::{ErrType, ParseErr};
-use crate::parser::{Action, ActionData, Parser};
+use crate::err::{ClockErr, ClockErrType, ErrType, ParseErr};
+use crate::parser::{ActionData, Parser};
 use crate::s_time::STime;
 use chrono::naive::NaiveDate;
+use std::collections::BTreeMap;
 
 pub struct Group {
-    name: String,
-    members: Vec<String>,
+    pub name: String,
+    pub members: Vec<String>,
 }
 
+#[derive(Debug, Clone)]
+pub struct Clock {
+    pub time_in: STime,
+    pub time_out: STime,
+    pub date: NaiveDate,
+    pub job: String,
+    pub tags: Vec<String>,
+}
+
+//Half a clock
 pub struct Clockin {
     time_in: STime,
-    time_out: STime,
+    date: NaiveDate,
     job: String,
+    tags: Vec<String>,
 }
 
-pub struct Reader {
-    groups: Vec<Group>,
-    clocks: Vec<Clockin>,
+impl Clockin {
+    pub fn as_clock(self, time_out: STime) -> Clock {
+        Clock {
+            time_in: self.time_in,
+            time_out,
+            date: self.date,
+            job: self.job,
+            tags: self.tags,
+        }
+    }
 }
 
-pub fn read(s: &str) -> Result<Reader, ParseErr> {
-    let mut reader = Reader {
-        groups: Vec::new(),
-        clocks: Vec::new(),
-    };
-    read_to(s, &mut reader)?;
-    Ok(reader)
+pub struct ClockStore {
+    pub groups: Vec<Group>,
+    pub clocks: Vec<Clock>,
 }
 
-pub fn read_to(s: &str, r: &mut Reader) -> Result<(), ParseErr> {
-    let mut p = Parser::new(s);
-    let mut year: Option<i32> = None;
-    let mut time_in: Option<STime> = None;
-    let mut time_out: Option<STime> = None;
-    let mut date: Option<NaiveDate> = None;
-    let mut job: Option<String> = None;
-    let mut tags: Vec<String> = Vec::new();
-    loop {
-        let action = p.next_action()?;
-        match action.ad {
-            ActionData::Group(name, members) => r.groups.push(Group { name, members }),
-            ActionData::ShortDate(dd, mm) => match &year {
-                Some(yr) => date = Some(NaiveDate::from_ymd(*yr, mm, dd)),
-                None => return Err(action.as_err(ErrType::YearNotSet)),
-            },
-            ActionData::LongDate(dd, mm, yy) => date = Some(NaiveDate::from_ymd(yy, mm, dd)),
-            ActionData::SetJob(j) => job = Some(j.to_string()),
-            ActionData::SetYear(yr) => year = Some(yr),
-            ActionData::ClearTags => tags.clear(),
-            ActionData::ClearTag(t) => tags.retain(|i| i != t),
-            ActionData::Tag(t) => {
-                if !tags.iter().find(|i| *i == t).is_some() {
-                    tags.push(t.to_string())
-                }
-            }
-            ActionData::Clockin(t) => time_in = Some(t), //TODO make clockin and Out add the item
-            ActionData::Clockout(t) => time_out = Some(t),
-            ActionData::End => return Ok(()),
+pub struct ReadState {
+    pub year: Option<i32>,
+    pub date: Option<NaiveDate>,
+    pub job: Option<String>,
+    pub tags: Vec<String>,
+    pub curr_in: Option<Clockin>,
+}
+
+impl ReadState {
+    pub fn new() -> Self {
+        ReadState {
+            year: None,
+            date: None,
+            job: None,
+            tags: Vec::new(),
+            curr_in: None,
+        }
+    }
+}
+
+impl ClockStore {
+    pub fn new() -> Self {
+        ClockStore {
+            groups: Vec::new(),
+            clocks: Vec::new(),
         }
     }
 
-    Ok(())
+    pub fn read(&mut self, s: &str) -> Result<ReadState, ParseErr> {
+        let mut p = Parser::new(s);
+        let mut rs = ReadState::new();
+
+        loop {
+            let action = p.next_action()?;
+            match action.ad {
+                ActionData::Group(name, members) => self.groups.push(Group { name, members }),
+                ActionData::ShortDate(dd, mm) => match &rs.year {
+                    Some(yr) => rs.date = Some(NaiveDate::from_ymd(*yr, mm, dd)),
+                    None => return Err(action.as_err(ErrType::YearNotSet)),
+                },
+                ActionData::LongDate(dd, mm, yy) => rs.date = Some(NaiveDate::from_ymd(yy, mm, dd)),
+                ActionData::SetJob(j) => rs.job = Some(j.to_string()),
+                ActionData::SetYear(yr) => rs.year = Some(yr),
+                ActionData::ClearTags => rs.tags.clear(),
+                ActionData::ClearTag(t) => rs.tags.retain(|i| i != t),
+                ActionData::Tag(t) => {
+                    if !rs.tags.iter().find(|i| *i == t).is_some() {
+                        rs.tags.push(t.to_string())
+                    }
+                }
+                ActionData::Clockin(t) => {
+                    if let Some(last) = rs.curr_in.take() {
+                        //TODO add checks
+                        self.clocks.push(last.as_clock(t));
+                    }
+                    rs.curr_in = Some(Clockin {
+                        time_in: t,
+                        date: rs
+                            .date
+                            .clone()
+                            .take()
+                            .ok_or(action.as_err(ErrType::DateNotSet))?,
+                        job: rs
+                            .job
+                            .clone()
+                            .take()
+                            .ok_or(action.as_err(ErrType::JobNotSet))?,
+                        tags: rs.tags.clone(),
+                    })
+                }
+                ActionData::Clockout(t) => {
+                    match rs.curr_in.take() {
+                        //with checks
+                        Some(i) => self.clocks.push(i.as_clock(t)),
+                        None => return Err(action.as_err(ErrType::ClockinNotSet)),
+                    }
+                }
+                ActionData::End => return Ok(rs),
+            }
+        }
+    }
+
+    pub fn as_time_map(self) -> Result<BTreeMap<String, STime>, ClockErr> {
+        let mut mp = BTreeMap::new();
+        for c in self.clocks {
+            if c.time_in >= c.time_out {
+                return Err(ClockErr {
+                    clock: c,
+                    etype: ClockErrType::OutBeforeIn,
+                });
+            }
+            match mp.get_mut(&c.job) {
+                Some(tot) => {
+                    *tot += c.time_out - c.time_in;
+                }
+                None => {
+                    mp.insert(c.job.to_string(), c.time_out - c.time_in);
+                }
+            }
+        }
+        Ok(mp)
+    }
 }

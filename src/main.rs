@@ -1,25 +1,84 @@
+use clap::{clap_app, crate_version};
+
 pub mod err;
 pub mod parser;
 pub mod reader;
 pub mod s_time;
 pub mod tokenize;
+use clap_conf::*;
 use err::CanErr;
+use reader::*;
 use std::io::Read;
-//use tokenize::*;
-use parser::*;
+
+//use std::collections::BTreeMap;
 
 fn main() -> Result<(), err::BoxErr> {
-    let mut input = std::io::stdin();
-    let mut s = String::new();
-    input.read_to_string(&mut s).as_err()?;
-    let mut tk = Parser::new(&s);
-    loop {
-        let ac = tk.next_action().as_err()?;
-        if ac.ad == ActionData::End {
-            break;
-        }
-        println!("Action :: {:?}", ac);
+    let clap = clap_app! (
+        work_tock =>
+        (version : crate_version!())
+        (author:"Matthew Stoodley")
+        (about:"Clock in and out of work for different jobs/projects")
+        (@arg config: -c "Config File")
+        (@subcommand complete =>)
+        (@subcommand in =>
+            (@arg job: -j --job +takes_value "The job to clockin to")
+            (@arg at: -a --at +takes_value "Time to clockin")
+            (@arg date : -d --date +takes_value "Date to clockin")
+        )
+        (@subcommand out =>
+            (@arg long_day:-l --long_day "Allow Days times greater than 24 hours")
+            (@arg same_day:-s --same_day "Clock out on same day as last clockin")
+            (@arg at:-a --at +takes_value "The time to clockout at")
+        )
+        (@subcommand write =>
+            (@arg format:--format +takes_value "Output format yaml,json,[default] tock")
+            (@arg write_file:-f +takes_value "Write output to a file (instead of stdout)")
+        )
+        (@arg job_filter: -j --job +takes_value "filter by job")
+        (@arg group_filter:-g --group +takes_value "filter by group")
+        (@arg tag_filter:--tag +takes_value "filter by tag")
+
+        (@arg week_filter: --week +takes_value "filter by week (1-53)")
+        (@arg this_week: -w --this_week "filter by this week")
+        (@arg month_filter : --month +takes_value "filter by month")
+        (@arg this_month:-m --this_month "Filter by this month")
+        (@arg day_filter:--dat +takes_value "filter by day")
+        (@arg today:-t --today "filter by today")
+
+        (@arg since:--since +takes_value "filter after including date")
+        (@arg before:--before +takes_value "filter before not including date")
+
+        (@arg file:-f --file +takes_value "The main file")
+        (@arg other_files:-o --other +takes_value #{0,30} "Other files to process")
+        (@arg stdin:--stdin "read stdin instead of any files")
+    )
+    .get_matches();
+
+    let cfg = clap_conf::with_toml_env(&clap, &["{HOME}/.config/work_tock/init.toml"]);
+
+    let mut clocks = ClockStore::new();
+
+    if clap.is_present("stdin") {
+        let mut input = std::io::stdin();
+        let mut s = String::new();
+        input.read_to_string(&mut s).as_err()?;
+        clocks.read(&s)?;
+    } else {
+        let fname = cfg
+            .grab()
+            .arg("file")
+            .conf("config.file")
+            .rep_env()
+            .as_err()?;
+        let mut input = std::fs::File::open(fname)?;
+        let mut s = String::new();
+        input.read_to_string(&mut s).as_err()?;
+        clocks.read(&s)?;
     }
+
+    let time_map = clocks.as_time_map();
+
+    println!("{:?}", time_map);
 
     Ok(())
 }
