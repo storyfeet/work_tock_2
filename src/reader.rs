@@ -128,7 +128,7 @@ impl ClockStore {
     pub fn as_time_map(self) -> Result<BTreeMap<String, STime>, ClockErr> {
         let mut mp = BTreeMap::new();
         for c in self.clocks {
-            if c.time_in >= c.time_out {
+            if c.time_in > c.time_out {
                 return Err(ClockErr {
                     clock: c,
                     etype: ClockErrType::OutBeforeIn,

@@ -148,7 +148,7 @@ impl<'a> Tokenizer<'a> {
     pub fn ident(&mut self) -> Token<'a> {
         let mut tmp = self.chars();
         while let Some((i, c)) = tmp.next() {
-            if !c.is_alphabetic() && c != '_' {
+            if !c.is_alphabetic() && c != '_' && (c < '0' || c > '9') {
                 return self.make_token(i, TokenType::Ident);
             }
             self.col += 1;

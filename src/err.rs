@@ -49,7 +49,16 @@ pub enum ErrType {
     YearNotSet,
     DateNotSet,
     ClockinNotSet,
+    MissingItem,
+    MinutesOver60,
     Expected(TokenType),
+}
+impl std::error::Error for ErrType {}
+
+impl fmt::Display for ErrType {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "Error {:?}", self)
+    }
 }
 
 #[derive(Debug)]

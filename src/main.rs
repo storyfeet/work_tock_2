@@ -1,6 +1,7 @@
 use clap::{clap_app, crate_version};
 
 pub mod err;
+pub mod filter;
 pub mod parser;
 pub mod reader;
 pub mod s_time;
@@ -36,9 +37,9 @@ fn main() -> Result<(), err::BoxErr> {
             (@arg format:--format +takes_value "Output format yaml,json,[default] tock")
             (@arg write_file:-f +takes_value "Write output to a file (instead of stdout)")
         )
-        (@arg job_filter: -j --job +takes_value "filter by job")
-        (@arg group_filter:-g --group +takes_value "filter by group")
-        (@arg tag_filter:--tag +takes_value "filter by tag")
+        (@arg job_filter: -j --job +takes_value #{1,20}"filter by job")
+        (@arg group_filter:-g --group +takes_value #{1,20} "filter by group")
+        (@arg tag_filter:--tag +takes_value #{1,20} "filter by tag")
 
         (@arg week_filter: --week +takes_value "filter by week (1-53)")
         (@arg this_week: -w --this_week "filter by this week")
@@ -76,10 +77,34 @@ fn main() -> Result<(), err::BoxErr> {
             .conf("config.file")
             .rep_env()
             .as_err()?;
-        let mut input = std::fs::File::open(fname)?;
-        let mut s = String::new();
-        input.read_to_string(&mut s).as_err()?;
+        let s = load_file(&fname)?;
         clocks.read(&s)?;
+    }
+
+    //Build multi filter
+    let mut filters: Vec<Box<dyn Fn(&Clock) -> bool>> = Vec::new();
+
+    if let Some(jobs) = clap.values_of("job_filter") {
+        filters.push(filter::by_job(jobs))
+    }
+
+    if let Some(tags) = clap.values_of("tag_filter") {
+        filters.push(filter::by_tag(tags));
+    }
+
+    if let Some(grps) = clap.values_of("group_filter") {
+        filters.push(filter::by_group(grps, &clocks.groups));
+    }
+
+    if filters.len() > 0 {
+        clocks.clocks.retain(|c: &Clock| {
+            for f in &filters {
+                if !f(c) {
+                    return false;
+                }
+            }
+            true
+        });
     }
 
     let time_map = clocks.as_time_map();
