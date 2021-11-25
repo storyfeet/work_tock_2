@@ -19,7 +19,9 @@ fn main() -> Result<(), err::BoxErr> {
         (author:"Matthew Stoodley")
         (about:"Clock in and out of work for different jobs/projects")
         (@arg config: -c "Config File")
-        (@subcommand complete =>)
+        (@subcommand complete =>
+            (about : "Returns a list of jobs in the current file to aid tab completion")
+         )
         (@subcommand in =>
             (@arg job: -j --job +takes_value "The job to clockin to")
             (@arg at: -a --at +takes_value "Time to clockin")
@@ -49,12 +51,16 @@ fn main() -> Result<(), err::BoxErr> {
         (@arg before:--before +takes_value "filter before not including date")
 
         (@arg file:-f --file +takes_value "The main file")
-        (@arg other_files:-o --other +takes_value #{0,30} "Other files to process")
+        (@arg history:-h --history +takes_value #{0,30} "Other files to process")
         (@arg stdin:--stdin "read stdin instead of any files")
     )
     .get_matches();
 
     let cfg = clap_conf::with_toml_env(&clap, &["{HOME}/.config/work_tock/init.toml"]);
+
+    if let Some(_) = clap.subcommand_matches("complete") {
+        return complete(&cfg);
+    }
 
     let mut clocks = ClockStore::new();
 
@@ -81,4 +87,51 @@ fn main() -> Result<(), err::BoxErr> {
     println!("{:?}", time_map);
 
     Ok(())
+}
+
+pub fn complete<'a, H: clap_conf::Getter<'a, String>>(cfg: &'a H) -> Result<(), err::BoxErr> {
+    let mut files = history_list(cfg);
+    if let Ok(fname) = cfg.grab().arg("file").conf("config.file").rep_env() {
+        files.push(fname);
+    }
+    let mut mp = std::collections::BTreeMap::new();
+    for f in files {
+        let s = load_file(&f)?;
+        let mut p = parser::Parser::new(&s);
+        while let Ok(Some(s)) = p.next_ident() {
+            match mp.get(s) {
+                Some(()) => {}
+                None => {
+                    mp.insert(s.to_string(), ());
+                }
+            }
+        }
+    }
+
+    for k in mp.keys() {
+        print!("{} ", k);
+    }
+    print!("\n");
+    Ok(())
+}
+
+pub fn history_list<'a, H: clap_conf::Getter<'a, String>>(cfg: &'a H) -> Vec<String> {
+    let list = cfg
+        .grab_multi()
+        .arg("history")
+        .conf("config.history")
+        .done();
+    match list {
+        Some(it) => it
+            .map(|s| clap_conf::replace::replace_env(&s).unwrap_or(s))
+            .collect(),
+        None => Vec::new(),
+    }
+}
+
+fn load_file(fname: &str) -> std::io::Result<String> {
+    let mut s = String::new();
+    let mut f = std::fs::File::open(fname)?;
+    f.read_to_string(&mut s)?;
+    Ok(s)
 }

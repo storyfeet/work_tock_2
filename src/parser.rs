@@ -85,6 +85,17 @@ impl<'a> Parser<'a> {
         }
     }
 
+    pub fn next_ident(&mut self) -> Result<Option<&'a str>, ParseErr> {
+        loop {
+            let t = self.next_token()?;
+            match t.tt {
+                TokenType::EOF => return Ok(None),
+                TokenType::Ident => return Ok(Some(t.s)),
+                _ => {}
+            }
+        }
+    }
+
     pub fn next_action(&mut self) -> ActionRes<'a> {
         let mut t = self.next_token()?;
         while t.tt == TokenType::Sep {
