@@ -1,12 +1,10 @@
-use crate::err::{self, CanErr};
+use crate::err::{self, CanErr, ErrType};
 use chrono::naive::NaiveDate;
 use chrono::offset::Local;
-use chrono::Timelike;
+use chrono::{Timelike, Weekday};
 use derive_more::*;
 use std::fmt::{Debug, Display, Formatter};
 use std::str::FromStr;
-
-//use crate::err::ParseErr;
 
 #[derive(Copy, Clone, PartialOrd, PartialEq, Eq, Add, Sub, AddAssign, SubAssign)]
 pub struct STime(u32); //minutes
@@ -43,11 +41,37 @@ pub fn date_from_str(s: &str, def_year: Option<i32>) -> Result<NaiveDate, err::B
     let mut ss = s.split("/");
     let dd: u32 = num_from_split(&mut ss)?;
     let mm: u32 = num_from_split(&mut ss)?;
-    let yy = num_from_split(&mut ss);
-    match yy {
-        Ok(y) => Ok(NaiveDate::from_ymd(y, mm, dd)),
-        Err(e) => def_year.map(|y| NaiveDate::from_ymd(y, mm, dd)).ok_or(e),
+    match num_from_split(&mut ss) {
+        Ok(y) => NaiveDate::from_ymd_opt(y, mm, dd)
+            .ok_or(ErrType::DateNotValid)
+            .as_err(),
+        Err(e) => match def_year {
+            Some(y) => NaiveDate::from_ymd_opt(y, mm, dd)
+                .ok_or(ErrType::DateNotValid)
+                .as_err(),
+            None => Err(e),
+        },
     }
+}
+
+pub fn week_yr_from_str(s: &str, def_year: Option<i32>) -> Result<NaiveDate, err::BoxErr> {
+    let mut ss = s.split("/");
+    let dd: u32 = num_from_split(&mut ss)?;
+    match num_from_split(&mut ss) {
+        Ok(y) => NaiveDate::from_isoywd_opt(y, dd, Weekday::Mon)
+            .ok_or(ErrType::DateNotValid)
+            .as_err(),
+        Err(e) => match def_year {
+            Some(y) => NaiveDate::from_isoywd_opt(y, dd, Weekday::Mon)
+                .ok_or(ErrType::DateNotValid)
+                .as_err(),
+            None => Err(e),
+        },
+    }
+}
+
+pub fn today() -> NaiveDate {
+    chrono::offset::Local::today().naive_local()
 }
 
 fn num_from_split<'a, I: Iterator<Item = &'a str>, N: FromStr>(i: &mut I) -> Result<N, err::BoxErr>

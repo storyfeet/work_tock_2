@@ -6,6 +6,7 @@ pub mod parser;
 pub mod reader;
 pub mod s_time;
 pub mod tokenize;
+use chrono::{naive::NaiveDate, Datelike, Weekday};
 use clap_conf::*;
 use err::CanErr;
 use reader::*;
@@ -94,6 +95,19 @@ fn main() -> Result<(), err::BoxErr> {
 
     if let Some(grps) = clap.values_of("group_filter") {
         filters.push(filter::by_group(grps, &clocks.groups));
+    }
+
+    if let Some(wk) = clap.value_of("week_filter") {
+        let start = s_time::week_yr_from_str(wk, Some(s_time::today().year()))?;
+        let end = start + chrono::Duration::days(7);
+        filters.push(filter::between(start, end));
+    }
+
+    if clap.is_present("this_week") {
+        let wk = s_time::today().iso_week();
+        let start = NaiveDate::from_isoywd(wk.year(), wk.week(), Weekday::Mon);
+        let end = start + chrono::Duration::days(7);
+        filters.push(filter::between(start, end));
     }
 
     if filters.len() > 0 {

@@ -1,4 +1,5 @@
 use crate::reader::{Clock, Group};
+use chrono::naive::NaiveDate;
 
 pub type ClockFilter = Box<dyn Fn(&Clock) -> bool>;
 
@@ -30,4 +31,16 @@ pub fn by_group<'a, I: Iterator<Item = &'a str>>(tags: I, grps: &[Group]) -> Clo
         }
     }
     Box::new(move |c: &Clock| v.contains(&c.job))
+}
+
+pub fn before(d: NaiveDate) -> ClockFilter {
+    Box::new(move |c: &Clock| c.date < d)
+}
+
+pub fn since(d: NaiveDate) -> ClockFilter {
+    Box::new(move |c: &Clock| c.date >= d)
+}
+
+pub fn between(f: NaiveDate, t: NaiveDate) -> ClockFilter {
+    Box::new(move |c: &Clock| c.date >= f && c.date < t)
 }

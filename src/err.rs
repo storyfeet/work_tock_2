@@ -48,6 +48,7 @@ pub enum ErrType {
     JobNotSet,
     YearNotSet,
     DateNotSet,
+    DateNotValid,
     ClockinNotSet,
     MissingItem,
     MinutesOver60,
