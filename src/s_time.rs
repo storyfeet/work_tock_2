@@ -1,7 +1,7 @@
 use crate::err::{self, CanErr, ErrType};
 use chrono::naive::NaiveDate;
 use chrono::offset::Local;
-use chrono::{Timelike, Weekday};
+use chrono::{Datelike, Timelike, Weekday};
 use derive_more::*;
 use std::fmt::{Debug, Display, Formatter};
 use std::str::FromStr;
@@ -63,6 +63,35 @@ pub fn week_yr_from_str(s: &str, def_year: Option<i32>) -> Result<NaiveDate, err
             .as_err(),
         Err(e) => match def_year {
             Some(y) => NaiveDate::from_isoywd_opt(y, dd, Weekday::Mon)
+                .ok_or(ErrType::DateNotValid)
+                .as_err(),
+            None => Err(e),
+        },
+    }
+}
+
+pub fn prev_month_start(dt: &NaiveDate) -> NaiveDate {
+    let mut m = dt.month();
+    if m == 0 {
+        m = 12
+    }
+    NaiveDate::from_ymd(dt.year() - ((m / 12) as i32), m, 1)
+}
+
+pub fn next_month_start(dt: &NaiveDate) -> NaiveDate {
+    let m = dt.month();
+    NaiveDate::from_ymd(dt.year() + ((m / 12) as i32), (m % 12) + 1, 1)
+}
+
+pub fn month_yr_from_str(s: &str, def_year: Option<i32>) -> Result<NaiveDate, err::BoxErr> {
+    let mut ss = s.split("/");
+    let mm: u32 = num_from_split(&mut ss)?;
+    match num_from_split(&mut ss) {
+        Ok(y) => NaiveDate::from_ymd_opt(y, mm, 1)
+            .ok_or(ErrType::DateNotValid)
+            .as_err(),
+        Err(e) => match def_year {
+            Some(y) => NaiveDate::from_ymd_opt(y, mm, 1)
                 .ok_or(ErrType::DateNotValid)
                 .as_err(),
             None => Err(e),

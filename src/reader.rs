@@ -125,20 +125,40 @@ impl ClockStore {
         }
     }
 
-    pub fn as_time_map(self) -> Result<BTreeMap<String, STime>, ClockErr> {
+    pub fn as_time_map(self, print: bool) -> Result<BTreeMap<String, STime>, ClockErr> {
         let mut mp = BTreeMap::new();
+        let mut tot_time = STime::new(0, 0);
+        let mut last_date = NaiveDate::from_ymd(1, 1, 1);
         for c in self.clocks {
+            if c.date != last_date {
+                last_date = c.date;
+                println!("{}", last_date.format("%d/%m/%Y"));
+            }
             if c.time_in > c.time_out {
                 return Err(ClockErr {
                     clock: c,
                     etype: ClockErrType::OutBeforeIn,
                 });
             }
+            let inc = c.time_out - c.time_in;
+            tot_time += inc;
             match mp.get_mut(&c.job) {
                 Some(tot) => {
-                    *tot += c.time_out - c.time_in;
+                    *tot += inc;
+                    if print {
+                        println!(
+                            "  {:<15}: {}-{} = {} => {}   {}",
+                            c.job, c.time_in, c.time_out, inc, *tot, tot_time
+                        );
+                    }
                 }
                 None => {
+                    if print {
+                        println!(
+                            "  {:<15}: {}-{} = {} => {}   {}",
+                            c.job, c.time_in, c.time_out, inc, inc, tot_time
+                        );
+                    }
                     mp.insert(c.job.to_string(), c.time_out - c.time_in);
                 }
             }

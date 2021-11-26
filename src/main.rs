@@ -42,6 +42,7 @@ fn main() -> Result<(), err::BoxErr> {
         (@arg group_filter:-g --group +takes_value #{1,20} "filter by group")
         (@arg tag_filter:--tag +takes_value #{1,20} "filter by tag")
 
+        (@arg last: -l "filter by the last day")
         (@arg week_filter: --week +takes_value "filter by week (1-53)")
         (@arg this_week: -w --this_week "filter by this week")
         (@arg month_filter : --month +takes_value "filter by month")
@@ -55,6 +56,7 @@ fn main() -> Result<(), err::BoxErr> {
         (@arg file:-f --file +takes_value "The main file")
         (@arg history:-h --history +takes_value #{0,30} "Other files to process")
         (@arg stdin:--stdin "read stdin instead of any files")
+        (@arg print:-p --print "print all selected jobs")
     )
     .get_matches();
 
@@ -105,9 +107,55 @@ fn main() -> Result<(), err::BoxErr> {
 
     if clap.is_present("this_week") {
         let wk = s_time::today().iso_week();
-        let start = NaiveDate::from_isoywd(wk.year(), wk.week(), Weekday::Mon);
+        let mut start = NaiveDate::from_isoywd(wk.year(), wk.week(), Weekday::Mon);
+        if clap.is_present("last") {
+            start -= chrono::Duration::days(7);
+        }
         let end = start + chrono::Duration::days(7);
         filters.push(filter::between(start, end));
+    }
+
+    if let Some(mt) = clap.value_of("month_filter") {
+        let start = s_time::month_yr_from_str(mt, Some(s_time::today().year()))?;
+        let end = s_time::next_month_start(&start);
+        filters.push(filter::between(start, end));
+    }
+
+    if clap.is_present("this_month") {
+        let base = s_time::today().with_day(1).unwrap();
+        match clap.is_present("last") {
+            true => {
+                let start = s_time::prev_month_start(&base);
+                filters.push(filter::between(start, base));
+            }
+            false => {
+                let end = s_time::next_month_start(&base);
+                filters.push(filter::between(base, end));
+            }
+        }
+    }
+
+    if let Some(df) = clap.value_of("day_filter") {
+        let start = s_time::date_from_str(df, Some(s_time::today().year()))?;
+        let end = start + chrono::Duration::days(1);
+        filters.push(filter::between(start, end));
+    }
+    if clap.is_present("today") {
+        let base = s_time::today();
+        match clap.is_present("last") {
+            true => filters.push(filter::between(base - chrono::Duration::days(1), base)),
+            false => filters.push(filter::between(base, base + chrono::Duration::days(1))),
+        }
+    }
+
+    if let Some(ds) = clap.value_of("since") {
+        let d = s_time::date_from_str(ds, Some(s_time::today().year()))?;
+        filters.push(filter::since(d));
+    }
+
+    if let Some(ds) = clap.value_of("before") {
+        let d = s_time::date_from_str(ds, Some(s_time::today().year()))?;
+        filters.push(filter::before(d));
     }
 
     if filters.len() > 0 {
@@ -121,7 +169,7 @@ fn main() -> Result<(), err::BoxErr> {
         });
     }
 
-    let time_map = clocks.as_time_map();
+    let time_map = clocks.as_time_map(clap.is_present("print"));
 
     println!("{:?}", time_map);
 
