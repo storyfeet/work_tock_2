@@ -1,4 +1,4 @@
-use crate::err::{self, CanErr, ErrType};
+use crate::err::{self, ErrType};
 use chrono::naive::NaiveDate;
 use chrono::offset::Local;
 use chrono::{Datelike, Timelike, Weekday};
@@ -25,46 +25,46 @@ impl STime {
 }
 
 impl FromStr for STime {
-    type Err = err::BoxErr;
-    fn from_str(s: &str) -> Result<Self, err::BoxErr> {
+    type Err = anyhow::Error;
+    fn from_str(s: &str) -> anyhow::Result<Self> {
         let mut ss = s.split(":");
         let hr: u32 = num_from_split(&mut ss)?;
         let min: u32 = num_from_split(&mut ss)?;
         if min >= 60 {
-            return Err(err::ErrType::MinutesOver60).as_err();
+            return Err(err::ErrType::MinutesOver60.into());
         }
         Ok(STime(hr * 60 + min))
     }
 }
 
-pub fn date_from_str(s: &str, def_year: Option<i32>) -> Result<NaiveDate, err::BoxErr> {
+pub fn date_from_str(s: &str, def_year: Option<i32>) -> anyhow::Result<NaiveDate> {
     let mut ss = s.split("/");
     let dd: u32 = num_from_split(&mut ss)?;
     let mm: u32 = num_from_split(&mut ss)?;
     match num_from_split(&mut ss) {
         Ok(y) => NaiveDate::from_ymd_opt(y, mm, dd)
             .ok_or(ErrType::DateNotValid)
-            .as_err(),
+            .map_err(|e| e.into()),
         Err(e) => match def_year {
             Some(y) => NaiveDate::from_ymd_opt(y, mm, dd)
                 .ok_or(ErrType::DateNotValid)
-                .as_err(),
+                .map_err(|e| e.into()),
             None => Err(e),
         },
     }
 }
 
-pub fn week_yr_from_str(s: &str, def_year: Option<i32>) -> Result<NaiveDate, err::BoxErr> {
+pub fn week_yr_from_str(s: &str, def_year: Option<i32>) -> anyhow::Result<NaiveDate> {
     let mut ss = s.split("/");
     let dd: u32 = num_from_split(&mut ss)?;
     match num_from_split(&mut ss) {
         Ok(y) => NaiveDate::from_isoywd_opt(y, dd, Weekday::Mon)
             .ok_or(ErrType::DateNotValid)
-            .as_err(),
+            .map_err(|e| e.into()),
         Err(e) => match def_year {
             Some(y) => NaiveDate::from_isoywd_opt(y, dd, Weekday::Mon)
                 .ok_or(ErrType::DateNotValid)
-                .as_err(),
+                .map_err(|e| e.into()),
             None => Err(e),
         },
     }
@@ -83,17 +83,17 @@ pub fn next_month_start(dt: &NaiveDate) -> NaiveDate {
     NaiveDate::from_ymd(dt.year() + ((m / 12) as i32), (m % 12) + 1, 1)
 }
 
-pub fn month_yr_from_str(s: &str, def_year: Option<i32>) -> Result<NaiveDate, err::BoxErr> {
+pub fn month_yr_from_str(s: &str, def_year: Option<i32>) -> anyhow::Result<NaiveDate> {
     let mut ss = s.split("/");
     let mm: u32 = num_from_split(&mut ss)?;
     match num_from_split(&mut ss) {
         Ok(y) => NaiveDate::from_ymd_opt(y, mm, 1)
             .ok_or(ErrType::DateNotValid)
-            .as_err(),
+            .map_err(|e| e.into()),
         Err(e) => match def_year {
             Some(y) => NaiveDate::from_ymd_opt(y, mm, 1)
                 .ok_or(ErrType::DateNotValid)
-                .as_err(),
+                .map_err(|e| e.into()),
             None => Err(e),
         },
     }
@@ -103,15 +103,14 @@ pub fn today() -> NaiveDate {
     chrono::offset::Local::today().naive_local()
 }
 
-fn num_from_split<'a, I: Iterator<Item = &'a str>, N: FromStr>(i: &mut I) -> Result<N, err::BoxErr>
+fn num_from_split<'a, I: Iterator<Item = &'a str>, N: FromStr>(i: &mut I) -> anyhow::Result<N>
 where
-    <N as FromStr>::Err: std::error::Error + 'static,
+    <N as FromStr>::Err: std::error::Error + 'static + Sync + Send,
 {
-    i.next()
-        .ok_or(err::ErrType::MissingItem)
-        .as_err()?
-        .parse()
-        .as_err()
+    match i.next() {
+        Some(v) => v.parse().map_err(|e: <N as FromStr>::Err| e.into()),
+        None => Err(err::ErrType::MissingItem.into()),
+    }
 }
 
 impl Debug for STime {

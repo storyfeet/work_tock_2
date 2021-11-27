@@ -3,6 +3,7 @@ use crate::parser::{ActionData, Parser};
 use crate::s_time::STime;
 use chrono::naive::NaiveDate;
 use std::collections::BTreeMap;
+//use std::fmt::{self, Display};
 
 pub struct Group {
     pub name: String,
@@ -20,9 +21,9 @@ pub struct Clock {
 
 //Half a clock
 pub struct Clockin {
-    time_in: STime,
-    date: NaiveDate,
-    job: String,
+    pub time_in: STime,
+    pub date: NaiveDate,
+    pub job: String,
     tags: Vec<String>,
 }
 
@@ -132,7 +133,9 @@ impl ClockStore {
         for c in self.clocks {
             if c.date != last_date {
                 last_date = c.date;
-                println!("{}", last_date.format("%d/%m/%Y"));
+                if print {
+                    println!("{}", last_date.format("%d/%m/%Y"));
+                }
             }
             if c.time_in > c.time_out {
                 return Err(ClockErr {

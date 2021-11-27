@@ -6,15 +6,14 @@ pub mod parser;
 pub mod reader;
 pub mod s_time;
 pub mod tokenize;
-use chrono::{naive::NaiveDate, Datelike, Weekday};
 use clap_conf::*;
-use err::CanErr;
+use err_tools::*;
 use reader::*;
 use std::io::Read;
 
 //use std::collections::BTreeMap;
 
-fn main() -> Result<(), err::BoxErr> {
+fn main() -> anyhow::Result<()> {
     let clap = clap_app! (
         work_tock =>
         (version : crate_version!())
@@ -68,105 +67,46 @@ fn main() -> Result<(), err::BoxErr> {
 
     let mut clocks = ClockStore::new();
 
-    if clap.is_present("stdin") {
+    let read_state = if clap.is_present("stdin") {
         let mut input = std::io::stdin();
         let mut s = String::new();
-        input.read_to_string(&mut s).as_err()?;
-        clocks.read(&s)?;
+        input.read_to_string(&mut s).e_str("could not read stdin")?;
+        clocks.read(&s)?
     } else {
         let fname = cfg
             .grab()
             .arg("file")
             .conf("config.file")
             .rep_env()
-            .as_err()?;
+            .e_str("could not get filename")?;
         let s = load_file(&fname)?;
-        clocks.read(&s)?;
-    }
+        clocks.read(&s)?
+    };
 
-    //Build multi filter
-    let mut filters: Vec<Box<dyn Fn(&Clock) -> bool>> = Vec::new();
-
-    if let Some(jobs) = clap.values_of("job_filter") {
-        filters.push(filter::by_job(jobs))
-    }
-
-    if let Some(tags) = clap.values_of("tag_filter") {
-        filters.push(filter::by_tag(tags));
-    }
-
-    if let Some(grps) = clap.values_of("group_filter") {
-        filters.push(filter::by_group(grps, &clocks.groups));
-    }
-
-    if let Some(wk) = clap.value_of("week_filter") {
-        let start = s_time::week_yr_from_str(wk, Some(s_time::today().year()))?;
-        let end = start + chrono::Duration::days(7);
-        filters.push(filter::between(start, end));
-    }
-
-    if clap.is_present("this_week") {
-        let wk = s_time::today().iso_week();
-        let mut start = NaiveDate::from_isoywd(wk.year(), wk.week(), Weekday::Mon);
-        if clap.is_present("last") {
-            start -= chrono::Duration::days(7);
+    if let Some(ci) = &read_state.curr_in {
+        let now = s_time::STime::now();
+        if now < ci.time_in {
+            return e_str("You are clocked in, in the future");
         }
-        let end = start + chrono::Duration::days(7);
-        filters.push(filter::between(start, end));
-    }
-
-    if let Some(mt) = clap.value_of("month_filter") {
-        let start = s_time::month_yr_from_str(mt, Some(s_time::today().year()))?;
-        let end = s_time::next_month_start(&start);
-        filters.push(filter::between(start, end));
-    }
-
-    if clap.is_present("this_month") {
-        let base = s_time::today().with_day(1).unwrap();
-        match clap.is_present("last") {
-            true => {
-                let start = s_time::prev_month_start(&base);
-                filters.push(filter::between(start, base));
+        let today = s_time::today();
+        let d_string = match ci.date {
+            d if d == today => "today".to_string(),
+            d if d + chrono::Duration::days(1) == today => "yesterday".to_string(),
+            d => {
+                format!("{}", d.format("&d/%m/%Y"))
             }
-            false => {
-                let end = s_time::next_month_start(&base);
-                filters.push(filter::between(base, end));
-            }
-        }
+        };
+        println!(
+            "You have been clocked in for {}, since {}: {} for {} Hours",
+            ci.job,
+            d_string,
+            ci.time_in,
+            now.since(&today, ci.time_in, &ci.date),
+        );
     }
 
-    if let Some(df) = clap.value_of("day_filter") {
-        let start = s_time::date_from_str(df, Some(s_time::today().year()))?;
-        let end = start + chrono::Duration::days(1);
-        filters.push(filter::between(start, end));
-    }
-    if clap.is_present("today") {
-        let base = s_time::today();
-        match clap.is_present("last") {
-            true => filters.push(filter::between(base - chrono::Duration::days(1), base)),
-            false => filters.push(filter::between(base, base + chrono::Duration::days(1))),
-        }
-    }
-
-    if let Some(ds) = clap.value_of("since") {
-        let d = s_time::date_from_str(ds, Some(s_time::today().year()))?;
-        filters.push(filter::since(d));
-    }
-
-    if let Some(ds) = clap.value_of("before") {
-        let d = s_time::date_from_str(ds, Some(s_time::today().year()))?;
-        filters.push(filter::before(d));
-    }
-
-    if filters.len() > 0 {
-        clocks.clocks.retain(|c: &Clock| {
-            for f in &filters {
-                if !f(c) {
-                    return false;
-                }
-            }
-            true
-        });
+    if let Some(f) = filter::get_args_filter(&clap, &clocks)? {
+        clocks.clocks.retain(f);
     }
 
     let time_map = clocks.as_time_map(clap.is_present("print"));
@@ -176,7 +116,7 @@ fn main() -> Result<(), err::BoxErr> {
     Ok(())
 }
 
-pub fn complete<'a, H: clap_conf::Getter<'a, String>>(cfg: &'a H) -> Result<(), err::BoxErr> {
+pub fn complete<'a, H: clap_conf::Getter<'a, String>>(cfg: &'a H) -> anyhow::Result<()> {
     let mut files = history_list(cfg);
     if let Ok(fname) = cfg.grab().arg("file").conf("config.file").rep_env() {
         files.push(fname);
