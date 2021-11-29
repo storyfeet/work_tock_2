@@ -6,10 +6,15 @@ pub mod parser;
 pub mod reader;
 pub mod s_time;
 pub mod tokenize;
+use chrono::Datelike;
 use clap_conf::*;
 use err_tools::*;
 use reader::*;
+use s_time::STime;
+use std::fmt::Write;
 use std::io::Read;
+
+use std::str::FromStr;
 
 //use std::collections::BTreeMap;
 
@@ -67,11 +72,11 @@ fn main() -> anyhow::Result<()> {
 
     let mut clocks = ClockStore::new();
 
-    let read_state = if clap.is_present("stdin") {
+    let (fname, read_state) = if clap.is_present("stdin") {
         let mut input = std::io::stdin();
         let mut s = String::new();
         input.read_to_string(&mut s).e_str("could not read stdin")?;
-        clocks.read(&s)?
+        (None, clocks.read(&s)?)
     } else {
         let fname = cfg
             .grab()
@@ -80,29 +85,58 @@ fn main() -> anyhow::Result<()> {
             .rep_env()
             .e_str("could not get filename")?;
         let s = load_file(&fname)?;
-        clocks.read(&s)?
+        (Some(fname), clocks.read(&s)?)
     };
 
+    let today = s_time::today();
     if let Some(ci) = &read_state.curr_in {
-        let now = s_time::STime::now();
-        if now < ci.time_in {
+        if s_time::STime::now() < ci.time_in {
             return e_str("You are clocked in, in the future");
         }
-        let today = s_time::today();
-        let d_string = match ci.date {
-            d if d == today => "today".to_string(),
-            d if d + chrono::Duration::days(1) == today => "yesterday".to_string(),
-            d => {
-                format!("{}", d.format("&d/%m/%Y"))
-            }
+        ci.print();
+        clocks.clocks.push(ci.clone().as_clock(STime::now()));
+    }
+
+    if let Some(isub) = clap.subcommand_matches("in") {
+        let mut ws = "".to_string();
+        let indate = match isub.value_of("date") {
+            Some(d) => s_time::date_from_str(d, Some(today.year()))?,
+            None => today,
         };
-        println!(
-            "You have been clocked in for {}, since {}: {} for {} Hours",
-            ci.job,
-            d_string,
-            ci.time_in,
-            now.since(&today, ci.time_in, &ci.date),
-        );
+        if Some(indate) != read_state.date {
+            write!(ws, "{}\n", indate.format("%d/%m/%Y"))?;
+        }
+        ws.push('\t');
+        let job = isub
+            .value_of("job")
+            .map(String::from)
+            .or(read_state.job.clone())
+            .e_str("No Job provided for clock in")?;
+        if Some(&job) != read_state.job.as_ref() {
+            write!(ws, "{},", job)?;
+        }
+        let time = match isub.value_of("at") {
+            Some(t) => s_time::STime::from_str(t)?,
+            None => match isub.value_of("date") {
+                Some(_) => e_str("Date Time required when date given")?,
+                None => s_time::STime::now(),
+            },
+        };
+        write!(ws, "{}", time)?;
+
+        match &fname {
+            Some(nm) => {
+                let mut f = std::fs::OpenOptions::new()
+                    .write(true)
+                    .create(true)
+                    .append(true)
+                    .open(nm)?;
+                std::io::Write::write_fmt(&mut f, format_args!("{}\n", ws))?;
+            }
+            None => {
+                println!("{}", ws);
+            }
+        }
     }
 
     if let Some(f) = filter::get_args_filter(&clap, &clocks)? {

@@ -1,6 +1,6 @@
 use crate::err::{ClockErr, ClockErrType, ErrType, ParseErr};
 use crate::parser::{ActionData, Parser};
-use crate::s_time::STime;
+use crate::s_time::{today, STime};
 use chrono::naive::NaiveDate;
 use std::collections::BTreeMap;
 //use std::fmt::{self, Display};
@@ -20,6 +20,7 @@ pub struct Clock {
 }
 
 //Half a clock
+#[derive(Clone)]
 pub struct Clockin {
     pub time_in: STime,
     pub date: NaiveDate,
@@ -36,6 +37,24 @@ impl Clockin {
             job: self.job,
             tags: self.tags,
         }
+    }
+    pub fn print(&self) {
+        let now = STime::now();
+        let today = today();
+        let d_string = match self.date {
+            d if d == today => "today".to_string(),
+            d if d + chrono::Duration::days(1) == today => "yesterday".to_string(),
+            d => {
+                format!("{}", d.format("&d/%m/%Y"))
+            }
+        };
+        println!(
+            "You have been clocked in for {}, since {}: {} for {} Hours",
+            self.job,
+            d_string,
+            self.time_in,
+            now.since(&today, self.time_in, &self.date),
+        );
     }
 }
 
