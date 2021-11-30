@@ -1,6 +1,6 @@
 use crate::err::{ClockErr, ClockErrType, ErrType, ParseErr};
+use crate::moment::{today, Moment, STime};
 use crate::parser::{ActionData, Parser};
-use crate::s_time::{today, STime};
 use chrono::naive::NaiveDate;
 use std::collections::BTreeMap;
 //use std::fmt::{self, Display};
@@ -12,9 +12,8 @@ pub struct Group {
 
 #[derive(Debug, Clone)]
 pub struct Clock {
-    pub time_in: STime,
-    pub time_out: STime,
-    pub date: NaiveDate,
+    pub c_in: Moment,
+    pub c_out: STime,
     pub job: String,
     pub tags: Vec<String>,
 }
@@ -22,18 +21,17 @@ pub struct Clock {
 //Half a clock
 #[derive(Clone)]
 pub struct Clockin {
-    pub time_in: STime,
-    pub date: NaiveDate,
+    pub c_in: Moment,
     pub job: String,
     tags: Vec<String>,
 }
 
 impl Clockin {
-    pub fn as_clock(self, time_out: STime) -> Clock {
+    pub fn as_clock(self, c_out: STime) -> Clock {
         Clock {
-            time_in: self.time_in,
-            time_out,
-            date: self.date,
+            c_in: self.c_in,
+            c_out,
+
             job: self.job,
             tags: self.tags,
         }

@@ -6,6 +6,36 @@ use derive_more::*;
 use std::fmt::{Debug, Display, Formatter};
 use std::str::FromStr;
 
+#[derive(Copy, Clone, PartialOrd, PartialEq, Eq, Debug)]
+pub struct Moment {
+    pub t: STime,
+    pub d: NaiveDate,
+}
+
+impl Moment {
+    pub fn now() -> Self {
+        let now = Local::now();
+        Moment {
+            t: STime::new(now.time().hour() as u32, now.time().minute() as u32),
+            d: now.date().naive_local(),
+        }
+    }
+    pub fn new(d: NaiveDate, t: STime) -> Self {
+        Moment { d, t }
+    }
+    pub fn print_relative(&self, now: &Moment) -> String {
+        match self.d {
+            d if d == now.d => format!("today : {}", self.t),
+            d if d + chrono::Duration::days(1) == now.d => format!("yesterday : {}", self.t),
+            d => format!("{} : {}", d.format("&d/%m/%Y"), self.t),
+        }
+    }
+
+    pub fn print(&self) -> String {
+        self.print_relative(&Self::now())
+    }
+}
+
 #[derive(Copy, Clone, PartialOrd, PartialEq, Eq, Add, Sub, AddAssign, SubAssign)]
 pub struct STime(u32); //minutes
 

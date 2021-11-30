@@ -2,15 +2,15 @@ use clap::{clap_app, crate_version};
 
 pub mod err;
 pub mod filter;
+pub mod moment;
 pub mod parser;
 pub mod reader;
-pub mod s_time;
 pub mod tokenize;
 use chrono::Datelike;
 use clap_conf::*;
 use err_tools::*;
+use moment::STime;
 use reader::*;
-use s_time::STime;
 use std::fmt::Write;
 use std::io::Read;
 
@@ -90,7 +90,7 @@ fn main() -> anyhow::Result<()> {
 
     //let today = s_time::today();
     if let Some(ci) = &read_state.curr_in {
-        if s_time::STime::now() < ci.time_in {
+        if STime::now() < ci.time_in {
             return e_str("You are clocked in, in the future");
         }
         ci.print();
@@ -144,10 +144,10 @@ pub fn clock_in(
     read_state: reader::ReadState,
     fname: Option<String>,
 ) -> anyhow::Result<()> {
-    let today = s_time::today();
+    let today = moment::today();
     let mut ws = "".to_string();
     let indate = match isub.value_of("date") {
-        Some(d) => s_time::date_from_str(d, Some(today.year()))?,
+        Some(d) => moment::date_from_str(d, Some(today.year()))?,
         None => today,
     };
     if Some(indate) != read_state.date {
@@ -163,10 +163,10 @@ pub fn clock_in(
         write!(ws, "{},", job)?;
     }
     let time = match isub.value_of("at") {
-        Some(t) => s_time::STime::from_str(t)?,
+        Some(t) => STime::from_str(t)?,
         None => match isub.value_of("date") {
             Some(_) => e_str("Date Time required when date given")?,
-            None => s_time::STime::now(),
+            None => STime::now(),
         },
     };
     write!(ws, "{}", time)?;
