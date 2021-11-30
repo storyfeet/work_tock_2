@@ -1,5 +1,5 @@
 use crate::err::{ClockErr, ClockErrType, ErrType, ParseErr};
-use crate::moment::{today, Moment, STime};
+use crate::moment::{Moment, STime};
 use crate::parser::{ActionData, Parser};
 use chrono::naive::NaiveDate;
 use std::collections::BTreeMap;
@@ -31,27 +31,17 @@ impl Clockin {
         Clock {
             c_in: self.c_in,
             c_out,
-
             job: self.job,
             tags: self.tags,
         }
     }
     pub fn print(&self) {
-        let now = STime::now();
-        let today = today();
-        let d_string = match self.date {
-            d if d == today => "today".to_string(),
-            d if d + chrono::Duration::days(1) == today => "yesterday".to_string(),
-            d => {
-                format!("{}", d.format("&d/%m/%Y"))
-            }
-        };
+        let now = Moment::now();
         println!(
-            "You have been clocked in for {}, since {}: {} for {} Hours",
+            "You have been clocked in for {}, since {} for {} Hours",
             self.job,
-            d_string,
-            self.time_in,
-            now.since(&today, self.time_in, &self.date),
+            self.c_in.print_relative(&now),
+            now.time_since(&self.c_in),
         );
     }
 }
@@ -117,12 +107,13 @@ impl ClockStore {
                         self.clocks.push(last.as_clock(t));
                     }
                     rs.curr_in = Some(Clockin {
-                        time_in: t,
-                        date: rs
-                            .date
-                            .clone()
-                            .take()
-                            .ok_or(action.as_err(ErrType::DateNotSet))?,
+                        c_in: Moment::new(
+                            rs.date
+                                .clone()
+                                .take()
+                                .ok_or(action.as_err(ErrType::DateNotSet))?,
+                            t,
+                        ),
                         job: rs
                             .job
                             .clone()
@@ -148,19 +139,19 @@ impl ClockStore {
         let mut tot_time = STime::new(0, 0);
         let mut last_date = NaiveDate::from_ymd(1, 1, 1);
         for c in self.clocks {
-            if c.date != last_date {
-                last_date = c.date;
+            if c.c_in.d != last_date {
+                last_date = c.c_in.d;
                 if print {
                     println!("{}", last_date.format("%d/%m/%Y"));
                 }
             }
-            if c.time_in > c.time_out {
+            if c.c_in.t > c.c_out {
                 return Err(ClockErr {
                     clock: c,
                     etype: ClockErrType::OutBeforeIn,
                 });
             }
-            let inc = c.time_out - c.time_in;
+            let inc = c.c_out - c.c_in.t;
             tot_time += inc;
             match mp.get_mut(&c.job) {
                 Some(tot) => {
@@ -168,7 +159,7 @@ impl ClockStore {
                     if print {
                         println!(
                             "  {:<15}: {}-{} = {} => {}   {}",
-                            c.job, c.time_in, c.time_out, inc, *tot, tot_time
+                            c.job, c.c_in.t, c.c_out, inc, *tot, tot_time
                         );
                     }
                 }
@@ -176,10 +167,10 @@ impl ClockStore {
                     if print {
                         println!(
                             "  {:<15}: {}-{} = {} => {}   {}",
-                            c.job, c.time_in, c.time_out, inc, inc, tot_time
+                            c.job, c.c_in.t, c.c_out, inc, inc, tot_time
                         );
                     }
-                    mp.insert(c.job.to_string(), c.time_out - c.time_in);
+                    mp.insert(c.job.to_string(), c.c_out - c.c_in.t);
                 }
             }
         }

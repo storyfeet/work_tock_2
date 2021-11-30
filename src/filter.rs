@@ -1,5 +1,5 @@
+use crate::moment::{self, today};
 use crate::reader::{Clock, ClockStore, Group};
-use crate::s_time;
 use chrono::{naive::NaiveDate, Datelike, Weekday};
 use clap::ArgMatches;
 
@@ -36,15 +36,15 @@ pub fn by_group<'a, I: Iterator<Item = &'a str>>(tags: I, grps: &[Group]) -> Clo
 }
 
 pub fn before(d: NaiveDate) -> ClockFilter {
-    Box::new(move |c: &Clock| c.date < d)
+    Box::new(move |c: &Clock| c.c_in.d < d)
 }
 
 pub fn since(d: NaiveDate) -> ClockFilter {
-    Box::new(move |c: &Clock| c.date >= d)
+    Box::new(move |c: &Clock| c.c_in.d >= d)
 }
 
 pub fn between(f: NaiveDate, t: NaiveDate) -> ClockFilter {
-    Box::new(move |c: &Clock| c.date >= f && c.date < t)
+    Box::new(move |c: &Clock| c.c_in.d >= f && c.c_in.d < t)
 }
 
 pub fn get_args_filter(
@@ -67,13 +67,13 @@ pub fn get_args_filter(
     }
 
     if let Some(wk) = clap.value_of("week_filter") {
-        let start = s_time::week_yr_from_str(wk, Some(s_time::today().year()))?;
+        let start = moment::week_yr_from_str(wk, Some(today().year()))?;
         let end = start + chrono::Duration::days(7);
         filters.push(between(start, end));
     }
 
     if clap.is_present("this_week") {
-        let wk = s_time::today().iso_week();
+        let wk = today().iso_week();
         let mut start = NaiveDate::from_isoywd(wk.year(), wk.week(), Weekday::Mon);
         if clap.is_present("last") {
             start -= chrono::Duration::days(7);
@@ -83,32 +83,32 @@ pub fn get_args_filter(
     }
 
     if let Some(mt) = clap.value_of("month_filter") {
-        let start = s_time::month_yr_from_str(mt, Some(s_time::today().year()))?;
-        let end = s_time::next_month_start(&start);
+        let start = moment::month_yr_from_str(mt, Some(today().year()))?;
+        let end = moment::next_month_start(&start);
         filters.push(between(start, end));
     }
 
     if clap.is_present("this_month") {
-        let base = s_time::today().with_day(1).unwrap();
+        let base = today().with_day(1).unwrap();
         match clap.is_present("last") {
             true => {
-                let start = s_time::prev_month_start(&base);
+                let start = moment::prev_month_start(&base);
                 filters.push(between(start, base));
             }
             false => {
-                let end = s_time::next_month_start(&base);
+                let end = moment::next_month_start(&base);
                 filters.push(between(base, end));
             }
         }
     }
 
     if let Some(df) = clap.value_of("day_filter") {
-        let start = s_time::date_from_str(df, Some(s_time::today().year()))?;
+        let start = moment::date_from_str(df, Some(today().year()))?;
         let end = start + chrono::Duration::days(1);
         filters.push(between(start, end));
     }
     if clap.is_present("today") {
-        let base = s_time::today();
+        let base = today();
         match clap.is_present("last") {
             true => filters.push(between(base - chrono::Duration::days(1), base)),
             false => filters.push(between(base, base + chrono::Duration::days(1))),
@@ -116,12 +116,12 @@ pub fn get_args_filter(
     }
 
     if let Some(ds) = clap.value_of("since") {
-        let d = s_time::date_from_str(ds, Some(s_time::today().year()))?;
+        let d = moment::date_from_str(ds, Some(today().year()))?;
         filters.push(since(d));
     }
 
     if let Some(ds) = clap.value_of("before") {
-        let d = s_time::date_from_str(ds, Some(s_time::today().year()))?;
+        let d = moment::date_from_str(ds, Some(today().year()))?;
         filters.push(before(d));
     }
 

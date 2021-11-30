@@ -1,5 +1,5 @@
 use crate::err::*;
-use crate::s_time::STime;
+use crate::moment::STime;
 use crate::tokenize::{self, Token, TokenType};
 
 pub type ActionRes<'a> = Result<Action<'a>, ParseErr>;

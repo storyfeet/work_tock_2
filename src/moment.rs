@@ -34,6 +34,11 @@ impl Moment {
     pub fn print(&self) -> String {
         self.print_relative(&Self::now())
     }
+
+    pub fn time_since(&self, prev: &Moment) -> STime {
+        let days_between = (self.d - prev.d).num_days() as u32;
+        (STime::new(24 * days_between, 0) + self.t) - prev.t
+    }
 }
 
 #[derive(Copy, Clone, PartialOrd, PartialEq, Eq, Add, Sub, AddAssign, SubAssign)]

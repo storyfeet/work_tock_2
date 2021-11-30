@@ -90,7 +90,7 @@ fn main() -> anyhow::Result<()> {
 
     //let today = s_time::today();
     if let Some(ci) = &read_state.curr_in {
-        if STime::now() < ci.time_in {
+        if STime::now() < ci.c_in.t {
             return e_str("You are clocked in, in the future");
         }
         ci.print();
