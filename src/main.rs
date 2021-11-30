@@ -9,7 +9,7 @@ pub mod tokenize;
 use chrono::Datelike;
 use clap_conf::*;
 use err_tools::*;
-use moment::STime;
+use moment::{Moment, STime};
 use reader::*;
 use std::fmt::Write;
 use std::io::Read;
@@ -36,6 +36,7 @@ fn main() -> anyhow::Result<()> {
         (@subcommand out =>
             (@arg long_day:-l --long_day "Allow Days times greater than 24 hours")
             (@arg same_day:-s --same_day "Clock out on same day as last clockin")
+            (@arg date : -d --date "Set the date of the clock out")
             (@arg at:-a --at +takes_value "The time to clockout at")
         )
         (@subcommand write =>
@@ -100,6 +101,10 @@ fn main() -> anyhow::Result<()> {
     if let Some(isub) = clap.subcommand_matches("in") {
         clock_in(isub, read_state, fname)?;
         return Ok(());
+    }
+
+    if let Some(osub) = clap.subcommand_matches("out") {
+        clock_out(osub, &read_state, fname)?;
     }
 
     if let Some(f) = filter::get_args_filter(&clap, &clocks)? {
@@ -182,6 +187,58 @@ pub fn clock_in(
         }
         None => {
             println!("{}", ws);
+        }
+    }
+    Ok(())
+}
+
+pub fn clock_out(
+    osub: &clap::ArgMatches,
+    rs: &ReadState,
+    fname: Option<String>,
+) -> anyhow::Result<()> {
+    let curr_in = match &rs.curr_in {
+        Some(i) => i,
+        None => return err_tools::e_str("Cannot Clock out if not clocked in"),
+    };
+
+    let now = Moment::now();
+    let dfs = match osub.value_of("date") {
+        Some(d) => Some(moment::date_from_str(d, Some(now.d.year()))?),
+        None => None,
+    };
+
+    let out = match (dfs, osub.value_of("at"), osub.is_present("same_day")) {
+        (_, Some(ts), true) => Moment::new(curr_in.c_in.d, STime::from_str(ts)?),
+        (Some(ds), Some(ts), false) => Moment::new(ds, STime::from_str(ts)?),
+        (Some(_), None, _) | (_, None, true) => {
+            return e_str("Cannot use current time when applying a previous date")
+        }
+        (None, Some(ts), false) => Moment::new(now.d, STime::from_str(ts)?),
+        (None, None, false) => now,
+    };
+    let otime = match (
+        (out.d - curr_in.c_in.d).num_days(),
+        osub.is_present("long_day"),
+    ) {
+        (n, _) if n < 0 => return e_str("Cannot Clock out before clock in"),
+        (0, _) if out.t < curr_in.c_in.t => return e_str("Cannot Clock out before Clock in"),
+        (0, _) => out.t,
+        (n, true) => out.t + STime::new(n as u32 * 24, 0),
+        (_, false) => return e_str("If clocking out the next day, please mark -l for long_day"),
+    };
+
+    match &fname {
+        Some(nm) => {
+            let mut f = std::fs::OpenOptions::new()
+                .write(true)
+                .create(true)
+                .append(true)
+                .open(nm)?;
+            std::io::Write::write_fmt(&mut f, format_args!("  -{}\n", otime))?;
+        }
+        None => {
+            println!("  -{}", otime);
         }
     }
     Ok(())
