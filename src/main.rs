@@ -88,7 +88,7 @@ fn main() -> anyhow::Result<()> {
         (Some(fname), clocks.read(&s)?)
     };
 
-    let today = s_time::today();
+    //let today = s_time::today();
     if let Some(ci) = &read_state.curr_in {
         if s_time::STime::now() < ci.time_in {
             return e_str("You are clocked in, in the future");
@@ -98,45 +98,8 @@ fn main() -> anyhow::Result<()> {
     }
 
     if let Some(isub) = clap.subcommand_matches("in") {
-        let mut ws = "".to_string();
-        let indate = match isub.value_of("date") {
-            Some(d) => s_time::date_from_str(d, Some(today.year()))?,
-            None => today,
-        };
-        if Some(indate) != read_state.date {
-            write!(ws, "{}\n", indate.format("%d/%m/%Y"))?;
-        }
-        ws.push('\t');
-        let job = isub
-            .value_of("job")
-            .map(String::from)
-            .or(read_state.job.clone())
-            .e_str("No Job provided for clock in")?;
-        if Some(&job) != read_state.job.as_ref() {
-            write!(ws, "{},", job)?;
-        }
-        let time = match isub.value_of("at") {
-            Some(t) => s_time::STime::from_str(t)?,
-            None => match isub.value_of("date") {
-                Some(_) => e_str("Date Time required when date given")?,
-                None => s_time::STime::now(),
-            },
-        };
-        write!(ws, "{}", time)?;
-
-        match &fname {
-            Some(nm) => {
-                let mut f = std::fs::OpenOptions::new()
-                    .write(true)
-                    .create(true)
-                    .append(true)
-                    .open(nm)?;
-                std::io::Write::write_fmt(&mut f, format_args!("{}\n", ws))?;
-            }
-            None => {
-                println!("{}", ws);
-            }
-        }
+        clock_in(isub, read_state, fname)?;
+        return Ok(());
     }
 
     if let Some(f) = filter::get_args_filter(&clap, &clocks)? {
@@ -173,6 +136,54 @@ pub fn complete<'a, H: clap_conf::Getter<'a, String>>(cfg: &'a H) -> anyhow::Res
         print!("{} ", k);
     }
     print!("\n");
+    Ok(())
+}
+
+pub fn clock_in(
+    isub: &clap::ArgMatches,
+    read_state: reader::ReadState,
+    fname: Option<String>,
+) -> anyhow::Result<()> {
+    let today = s_time::today();
+    let mut ws = "".to_string();
+    let indate = match isub.value_of("date") {
+        Some(d) => s_time::date_from_str(d, Some(today.year()))?,
+        None => today,
+    };
+    if Some(indate) != read_state.date {
+        write!(ws, "{}\n", indate.format("%d/%m/%Y"))?;
+    }
+    ws.push('\t');
+    let job = isub
+        .value_of("job")
+        .map(String::from)
+        .or(read_state.job.clone())
+        .e_str("No Job provided for clock in")?;
+    if Some(&job) != read_state.job.as_ref() {
+        write!(ws, "{},", job)?;
+    }
+    let time = match isub.value_of("at") {
+        Some(t) => s_time::STime::from_str(t)?,
+        None => match isub.value_of("date") {
+            Some(_) => e_str("Date Time required when date given")?,
+            None => s_time::STime::now(),
+        },
+    };
+    write!(ws, "{}", time)?;
+
+    match &fname {
+        Some(nm) => {
+            let mut f = std::fs::OpenOptions::new()
+                .write(true)
+                .create(true)
+                .append(true)
+                .open(nm)?;
+            std::io::Write::write_fmt(&mut f, format_args!("{}\n", ws))?;
+        }
+        None => {
+            println!("{}", ws);
+        }
+    }
     Ok(())
 }
 
