@@ -3,10 +3,11 @@ use chrono::naive::NaiveDate;
 use chrono::offset::Local;
 use chrono::{Datelike, Timelike, Weekday};
 use derive_more::*;
+use std::cmp::{Ordering, PartialOrd};
 use std::fmt::{Debug, Display, Formatter};
 use std::str::FromStr;
 
-#[derive(Copy, Clone, PartialOrd, PartialEq, Eq, Debug)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub struct Moment {
     pub t: STime,
     pub d: NaiveDate,
@@ -41,7 +42,22 @@ impl Moment {
     }
 }
 
-#[derive(Copy, Clone, PartialOrd, PartialEq, Eq, Add, Sub, AddAssign, SubAssign)]
+impl PartialOrd for Moment {
+    fn partial_cmp(&self, b: &Self) -> Option<Ordering> {
+        Some(self.cmp(b))
+    }
+}
+
+impl Ord for Moment {
+    fn cmp(&self, b: &Self) -> Ordering {
+        match self.d.cmp(&b.d) {
+            Ordering::Equal => self.t.cmp(&b.t),
+            n => return n,
+        }
+    }
+}
+
+#[derive(Copy, Clone, PartialOrd, Ord, PartialEq, Eq, Add, Sub, AddAssign, SubAssign)]
 pub struct STime(u32); //minutes
 
 impl STime {

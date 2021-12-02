@@ -79,6 +79,17 @@ fn main() -> anyhow::Result<()> {
         input.read_to_string(&mut s).e_str("could not read stdin")?;
         (None, clocks.read(&s)?)
     } else {
+        if let Some(v) = cfg.grab_multi().arg("history").conf("history").done() {
+            for f in v {
+                let s = load_file(&f)?;
+                let rs = clocks
+                    .read(&s)
+                    .e_string(format!("Error in history file : {}", f))?;
+                if let Some(_in) = rs.curr_in {
+                    return e_string(format!("History file clocked in at end : {}", f));
+                }
+            }
+        }
         let fname = cfg
             .grab()
             .arg("file")

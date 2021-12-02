@@ -2,6 +2,7 @@ use crate::err::{ClockErr, ClockErrType, ErrType, ParseErr};
 use crate::moment::{Moment, STime};
 use crate::parser::{ActionData, Parser};
 use chrono::naive::NaiveDate;
+use std::cmp::{Ord, Ordering, PartialOrd};
 use std::collections::BTreeMap;
 //use std::fmt::{self, Display};
 
@@ -10,12 +11,36 @@ pub struct Group {
     pub members: Vec<String>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Clock {
     pub c_in: Moment,
     pub c_out: STime,
     pub job: String,
     pub tags: Vec<String>,
+}
+
+impl Ord for Clock {
+    fn cmp(&self, b: &Self) -> Ordering {
+        match self.c_in.cmp(&b.c_in) {
+            Ordering::Equal => {}
+            o => return o,
+        }
+        match self.c_out.cmp(&b.c_out) {
+            Ordering::Equal => {}
+            o => return o,
+        }
+        match self.job.cmp(&b.job) {
+            Ordering::Equal => {}
+            o => return o,
+        }
+        self.tags.cmp(&b.tags)
+    }
+}
+
+impl PartialOrd for Clock {
+    fn partial_cmp(&self, b: &Self) -> Option<Ordering> {
+        Some(self.cmp(b))
+    }
 }
 
 //Half a clock
@@ -132,6 +157,12 @@ impl ClockStore {
                 ActionData::End => return Ok(rs),
             }
         }
+    }
+
+    pub fn check_collisions(&mut self) {
+        self.clocks.sort();
+        self.clocks.dedup();
+        //TODO find collisions
     }
 
     pub fn as_time_map(self, print: bool) -> Result<BTreeMap<String, STime>, ClockErr> {
