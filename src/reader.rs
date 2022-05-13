@@ -44,7 +44,7 @@ impl PartialOrd for Clock {
 }
 
 //Half a clock
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Clockin {
     pub c_in: Moment,
     pub job: String,

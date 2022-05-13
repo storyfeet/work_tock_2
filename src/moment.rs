@@ -73,6 +73,13 @@ impl STime {
         let days_between = (*now_date - *then_date).num_days() as u32;
         *self + STime::new(24 * days_between, 0) - then_time
     }
+
+    pub fn earlier(&self, b: Self) -> Self {
+        if b.0 > self.0 {
+            return Self::new(0, 0);
+        }
+        Self(self.0 - b.0)
+    }
 }
 
 impl FromStr for STime {

@@ -29,15 +29,22 @@ fn main() -> anyhow::Result<()> {
             (about : "Returns a list of jobs in the current file to aid tab completion")
          )
         (@subcommand in =>
+            (about:"Clock into a job (automatically clocks out of the current job)")
             (@arg job: -j --job +takes_value "The job to clockin to")
             (@arg at: -a --at +takes_value "Time to clockin")
             (@arg date : -d --date +takes_value "Date to clockin")
         )
         (@subcommand out =>
+            (about:"Clock out of the current job")
             (@arg long_day:-l --long_day "Allow Days times greater than 24 hours")
             (@arg same_day:-s --same_day "Clock out on same day as last clockin")
             (@arg date : -d --date "Set the date of the clock out")
             (@arg at:-a --at +takes_value "The time to clockout at")
+        )
+        (@subcommand last =>
+            (about:"Clock in a duration ago and out again")
+            (@arg duration:+required "The duration")
+            (@arg job:-j --job +takes_value "The job to clock in and out of")
         )
         (@subcommand write =>
             (@arg format:--format +takes_value "Output format yaml,json,[default] tock")
@@ -110,12 +117,18 @@ fn main() -> anyhow::Result<()> {
     }
 
     if let Some(isub) = clap.subcommand_matches("in") {
-        clock_in(isub, read_state, fname)?;
+        clock_in(isub, read_state, &fname)?;
         return Ok(());
     }
 
     if let Some(osub) = clap.subcommand_matches("out") {
-        clock_out(osub, &read_state, fname)?;
+        clock_out(osub, &read_state, &fname)?;
+        return Ok(());
+    }
+
+    if let Some(lsub) = clap.subcommand_matches("last") {
+        clock_last(lsub, &read_state, &fname)?;
+        return Ok(());
     }
 
     if let Some(f) = filter::get_args_filter(&clap, &clocks)? {
@@ -158,7 +171,7 @@ pub fn complete<'a, H: clap_conf::Getter<'a, String>>(cfg: &'a H) -> anyhow::Res
 pub fn clock_in(
     isub: &clap::ArgMatches,
     read_state: reader::ReadState,
-    fname: Option<String>,
+    fname: &Option<String>,
 ) -> anyhow::Result<()> {
     let today = moment::today();
     let mut ws = "".to_string();
@@ -186,27 +199,13 @@ pub fn clock_in(
         },
     };
     write!(ws, "{}", time)?;
-
-    match &fname {
-        Some(nm) => {
-            let mut f = std::fs::OpenOptions::new()
-                .write(true)
-                .create(true)
-                .append(true)
-                .open(nm)?;
-            std::io::Write::write_fmt(&mut f, format_args!("{}\n", ws))?;
-        }
-        None => {
-            println!("{}", ws);
-        }
-    }
-    Ok(())
+    print_result(fname, &ws)
 }
 
 pub fn clock_out(
     osub: &clap::ArgMatches,
     rs: &ReadState,
-    fname: Option<String>,
+    fname: &Option<String>,
 ) -> anyhow::Result<()> {
     let curr_in = match &rs.curr_in {
         Some(i) => i,
@@ -250,6 +249,60 @@ pub fn clock_out(
         }
         None => {
             println!("  -{}", otime);
+        }
+    }
+    Ok(())
+}
+
+pub fn clock_last(
+    osub: &clap::ArgMatches,
+    rs: &ReadState,
+    fname: &Option<String>,
+) -> anyhow::Result<()> {
+    if let Some(i) = &rs.curr_in {
+        return e_string(format!("Currently clocked in for {:?}", i));
+    }
+    let today = moment::today();
+    let mut ws = "".to_string();
+    if Some(today) != rs.date {
+        write!(ws, "{}\n", today.format("%d/%m/%Y"))?;
+    }
+    write!(ws, "\t")?;
+    let job = osub
+        .value_of("job")
+        .map(String::from)
+        .or(rs.job.clone())
+        .e_str("No Job provided for clock in")?;
+    if Some(&job) != rs.job.as_ref() {
+        write!(ws, "{},", job)?;
+    }
+
+    let duration = match osub.value_of("duration") {
+        Some("hour") => STime::new(1, 0),
+        Some("half") => STime::new(0, 30),
+        Some(s) => STime::from_str(s)?,
+        None => STime::new(1, 0),
+    };
+
+    let t_out = STime::now();
+    let t_in = t_out.earlier(duration);
+    write!(ws, "{}\n  -{}\n", t_in, t_out)?;
+
+    print_result(fname, &ws)
+}
+
+pub fn print_result(fname: &Option<String>, s: &str) -> anyhow::Result<()> {
+    match &fname {
+        Some(nm) => {
+            let mut f = std::fs::OpenOptions::new()
+                .write(true)
+                .create(true)
+                .append(true)
+                .open(nm)?;
+            std::io::Write::write_fmt(&mut f, format_args!("{}\n", s))?;
+        }
+        None => {
+            println!("{}", s);
         }
     }
     Ok(())
